@@ -429,7 +429,9 @@ class CopilotSetupTests(unittest.TestCase):
 
 
     def test_private_files_ignored_and_template_is_not(self):
-        result = subprocess.run(["git", "check-ignore", ".github/hooks/ucore-session-archive.json", ".vscode/session-archive.json", ".vscode/ucore-hooks/copilot_hook.py", ".ai/agent-sessions/vscode-copilot/2026-09-09_00-00-00_session.jsonl"], cwd=REPOSITORY, text=True, capture_output=True)
-        self.assertEqual(4, len(result.stdout.splitlines()))
+        result = subprocess.run(["git", "check-ignore", ".github/hooks/ucore-session-archive.json", ".vscode/session-archive.json", ".vscode/ucore-hooks/copilot_hook.py"], cwd=REPOSITORY, text=True, capture_output=True)
+        self.assertEqual(3, len(result.stdout.splitlines()))
+        result = subprocess.run(["git", "check-ignore", "--no-index", ".ai/agent-sessions/vscode-copilot/2026-09-09_00-00-00_session.jsonl", ".ai/agent-sessions/vscode-copilot/.state/session.sqlite3"], cwd=REPOSITORY, capture_output=True)
+        self.assertEqual(1, result.returncode)
         result = subprocess.run(["git", "check-ignore", ".vscode/session-archive.example.json", ".vscode/copilot-hooks.example.json"], cwd=REPOSITORY, capture_output=True)
         self.assertEqual(1, result.returncode)

@@ -1,6 +1,9 @@
-# Raw working journals stay local; pre-commit creates sanitized checkpoints.
-events/
-ide/
-!submissions/
-agent-sessions/
+# Submit course records with code; keep runtime files and IDE state local.
 course-tools/
+ide/
+!agent-sessions/
+!agent-sessions/**
+!events/
+!events/**
+!submissions/
+!submissions/**

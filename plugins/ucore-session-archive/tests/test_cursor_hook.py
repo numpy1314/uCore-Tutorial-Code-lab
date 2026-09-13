@@ -278,8 +278,10 @@ class CursorSetupTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             cursor.install_hooks(Path(temp))
             self.assertEqual(checked_in, json.loads((Path(temp) / ".cursor/hooks.json").read_text()))
-        result = subprocess.run(["git", "check-ignore", ".cursor/session-archive.json", ".cursor/hooks.json", ".cursor/ucore-hooks/cursor_hook.py", ".ai/agent-sessions/cursor/2026-09-09_00-00-00_session.jsonl", ".ai/agent-sessions/cursor/.state/session.sqlite3"], cwd=REPOSITORY, text=True, capture_output=True)
-        self.assertEqual(5, len(result.stdout.splitlines()))
+        result = subprocess.run(["git", "check-ignore", ".cursor/session-archive.json", ".cursor/hooks.json", ".cursor/ucore-hooks/cursor_hook.py"], cwd=REPOSITORY, text=True, capture_output=True)
+        self.assertEqual(3, len(result.stdout.splitlines()))
+        result = subprocess.run(["git", "check-ignore", "--no-index", ".ai/agent-sessions/cursor/2026-09-09_00-00-00_session.jsonl", ".ai/agent-sessions/cursor/.state/session.sqlite3"], cwd=REPOSITORY, capture_output=True)
+        self.assertEqual(1, result.returncode)
 
 
     def test_installed_hook_runs_without_plugin_source_after_branch_switch(self):

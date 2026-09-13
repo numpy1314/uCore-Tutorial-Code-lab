@@ -10,7 +10,7 @@ from pathlib import Path
 RUNTIME_PATH = Path('.ai/course-tools')
 HOOKS_PATH = '.ai/course-tools/.course-monitor/hooks'
 LOCAL_PATHS = (
-    '.ai/course-tools/', '.ai/events/', '.ai/ide/', '.ai/agent-sessions/',
+    '.ai/course-tools/', '.ai/ide/',
     '.codex/config.toml', '.codex/session-archive.json',
     '.claude/settings.json', '.claude/settings.local.json', '.claude/session-archive.json',
     '.cursor/hooks.json', '.cursor/session-archive.json', '.cursor/ucore-hooks/',
@@ -87,14 +87,20 @@ def install_runtime(bundle, root=None):
     if exclude.is_symlink():
         raise ValueError('Git 本地排除配置不能是符号链接。')
     current = exclude.read_text(encoding='utf-8') if exclude.exists() else ''
+    # Migrate older installs so existing course records can be submitted with code.
+    record_patterns = {'/.ai/' + name + '/' for name in ('agent-sessions', 'events', 'submissions')}
+    text = ''.join(line for line in current.splitlines(keepends=True)
+                   if line.rstrip('\r\n') not in record_patterns)
     # Source-side caches remain after main's tracked Python files are checked out.
     # Keep these patterns unanchored so they cover caches at any directory depth.
     patterns = ['/' + name for name in LOCAL_PATHS] + ['__pycache__/', '*.py[cod]']
-    missing = [pattern for pattern in patterns if pattern not in current.splitlines()]
+    missing = [pattern for pattern in patterns if pattern not in text.splitlines()]
     if missing:
-        text = current + ('\n' if current and not current.endswith('\n') else '')
-        text += '# Installed course tools and local journals survive branch switches.\n'
-        write_file(exclude, (text + '\n'.join(missing) + '\n').encode('utf-8'))
+        text += '\n' if text and not text.endswith('\n') else ''
+        text += '# Installed course tools and local configuration survive branch switches.\n'
+        text += '\n'.join(missing) + '\n'
+    if text != current:
+        write_file(exclude, text.encode('utf-8'))
     aliases = {
         'course': [sys.executable, str(RUNTIME_PATH / 'course.py')],
         'agent-plugins': [sys.executable, str(RUNTIME_PATH / 'plugins/ucore-session-archive/scripts/setup_agents.py')],

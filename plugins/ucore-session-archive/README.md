@@ -13,6 +13,7 @@
 已安装的程序和插件源位于本地 `.ai/course-tools/`。
 
 归档位置为 `.ai/agent-sessions/<agent>/<UTC日期时间>_<session-id>.jsonl`。
+目录中的全部内容可通过普通 `git add` 与实验代码一起提交。
 每个 Agent 使用自己目录中的 `session-archive.json`，支持 `enabled` 和
 `messages` / `tool-calls` / `full` 三档 mode。
 

@@ -36,12 +36,14 @@ __pycache__/
 !/.claude-plugin/marketplace.json
 !/.ai/
 !/.ai/.gitignore
+!/.ai/agent-sessions/
+!/.ai/agent-sessions/**
+!/.ai/events/
+!/.ai/events/**
 !/.ai/submissions/
 !/.ai/submissions/**
 /.ai/course-tools/
-/.ai/events/
 /.ai/ide/
-**/.ai/agent-sessions/
 
 # Track shared project settings and examples, keep local archive policies private.
 !/.codex/

@@ -5,7 +5,7 @@
 
 ## 安装和开始实验
 
-需要 Python 3.10+、Git 和 VS Code 1.93+。Windows 建议使用 PowerShell 7；
+需要 Python 3.10+、Bash、Git 和 VS Code 1.93+。Windows 建议使用 PowerShell 7；
 AI 归档另需对应的 Agent 客户端。
 
 ```sh
@@ -13,7 +13,20 @@ git switch main
 python3 course.py
 ```
 
-入口安装随仓库提供的 VS Code 插件，配置提交前导出，打开实验工作区与实时日志。
+默认启动（`python3 course.py` 或 `python3 course.py start`）先执行
+`./scripts/setup-agent-plugins.sh auto`，自动检测并初始化 AI 会话归档。初始化成功后，
+再安装随仓库提供的 VS Code 插件，配置提交前导出，打开实验工作区与实时日志。
+通过 `--agent` 选择启动时的归档客户端，默认 `auto`。支持 `auto`、`codex`、
+`claude`、`cursor`、`vscode`、`copilot`（vscode 的别名）和 `all`：
+
+```sh
+python3 course.py --agent codex
+# 也可与显式 start 及已有选项一起使用：
+python3 course.py start --agent claude --skip-extension
+```
+
+`--agent codex` 选择 Codex 归档；位置参数 `codex` 用于发起一次课程 Codex 调用。
+
 Windows 打开独立日志窗口；Linux/macOS 在启动入口的终端显示日志。
 在 VS Code 中信任本实验工作区，保持该窗口打开，然后在另一个终端切换章节：
 
@@ -27,7 +40,7 @@ git course status
 `os/main.c`。新建 VS Code 集成终端并执行 `git status`，可观察命令开始、结束
 及退出码。命令采集需要终端支持 Shell Integration。
 
-AI 会话归档在 `main` 另行配置：
+启动时已按 `--agent` 配置 AI 会话归档；需要单独更新归档配置时，在 `main` 运行：
 
 ```sh
 ./scripts/setup-agent-plugins.sh auto
@@ -44,7 +57,8 @@ AI 会话归档在 `main` 另行配置：
 
 | 命令 | 用途 |
 | --- | --- |
-| `git course` | 打开实验工作区和实时日志 |
+| `git course` | 自动初始化 AI 归档，再打开实验工作区和实时日志 |
+| `git course --agent codex` | 初始化 Codex 归档，再打开实验工作区和实时日志 |
 | `git course logs` | 查看已有日志并持续显示新事件 |
 | `git course status` | 查看记录开关、日志位置、文件数量和提交 Hook |
 | `git course install` | 重新安装 VS Code 插件及提交 Hook |
@@ -55,7 +69,8 @@ AI 会话归档在 `main` 另行配置：
 | `git agent-plugins auto` | 检测并配置 AI 会话归档 |
 | `git agent-plugins cursor --mode full` | 调整指定客户端的归档模式 |
 
-`main` 中的 `python3 course.py` 与 `./scripts/setup-agent-plugins.sh` 是首次安装入口。
+`main` 中的 `python3 course.py` 是统一启动入口；`./scripts/setup-agent-plugins.sh`
+也可单独用于归档配置。`install` 用于独立安装课程工具，容器初始化仍可使用它。
 更新工具时回到 `main` 获取新版本，再执行安装命令；已安装的记录开关、归档模式和日志
 会被保留。重新克隆仓库或换一个工作目录后，需要在那个目录重新安装。
 
@@ -83,11 +98,22 @@ git course codex
 | `.ai/course-tools/` | 安装后的本地运行文件和课程配置 |
 
 关闭日志窗口后文件仍然保留。请同学们不要改动或删除过程记录，提交时会检查这些记录
-作为考核参考。正常 `git commit` 会导出并暂存课程事件快照；章节分支即使忽略隐藏目录，
-提交 Hook 仍能纳入自己生成的快照。事件 ID 按当前暂存区去重。
+作为考核参考。`main` 和 `ch1`–`ch8` 都允许跟踪 `.ai/agent-sessions/`、`.ai/events/`
+和 `.ai/submissions/` 的全部内容。使用普通 `git add` 将记录与代码一起暂存；
+正常 `git commit` 还会导出并暂存课程事件快照，事件 ID 按当前暂存区去重。
+
+```sh
+git add .
+git commit -m "docs: record lab work"
+git push origin HEAD
+```
+
+切换章节前先提交当前章节的记录。工具运行文件、IDE 状态和 Agent 本地配置仍被忽略。
+旧安装升级时，在更新后的 `main` 运行 `python3 course.py install --skip-extension`，
+安装器会清理 `.git/info/exclude` 中旧的记录排除规则；章节分支也需要更新 `.gitignore`。
 
 `git course export` 只生成快照，不会暂存或提交。反复手动导出而未暂存上次快照时，
-同一事件可能再次导出。原始事件、完整会话和本地运行文件均保持在本地。
+同一事件可能再次导出；生成的快照也可以使用普通 `git add` 暂存。
 
 ## 配置与记录范围
 

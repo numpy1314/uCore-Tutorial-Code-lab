@@ -37,8 +37,8 @@ if pending:
             stream.write(json.dumps(event, ensure_ascii=False, separators=(',', ':'), allow_nan=False) + '\n')
     file.chmod(0o600)
     if '--stage' in sys.argv:
-        # Chapter branches may ignore all dot-directories. Only the validated
-        # checkpoint created above is force-added; raw journals stay local.
+        # Support older chapter ignore rules by force-adding only the validated
+        # checkpoint created above. Other records are staged with the lab code.
         git('add', '-f', '--', str(file.relative_to(root)))
     print(f'Exported {len(pending)} sanitized events to {file.relative_to(root)}')
 else:

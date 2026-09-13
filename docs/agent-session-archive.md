@@ -15,11 +15,18 @@ GitHub Copilot 的本地会话归档。会话按归档模式保存，便于回�
 
 同一会话始终更新同一个文件，重复 hooks 不新增会话文件。日期使用首次可用的会话
 时间；源记录没有时间时使用首次归档时间。后续源记录重放或模式切换不会改变文件名。
-整个目录被 Git 忽略，源会话日志不会被修改或删除。
+整个目录（包括 `.state/` 归档索引）可通过普通 `git add` 随实验代码提交，
+`main` 和 `ch1`–`ch8` 都不会忽略这些文件。客户端的源会话日志不会被修改或删除。
 
 ## 安装
 
-需要 Bash、Python 3.9+，以及支持相应 hooks 的 Agent 客户端。首次在 `main` 分支的仓库根目录执行：
+运行 `python3 course.py`（Python 3.10+）会先自动执行
+`./scripts/setup-agent-plugins.sh auto`，然后打开课程工作区与实时日志。
+也可用 `python3 course.py --agent codex` 指定客户端；`--agent` 支持
+`auto`、`codex`、`claude`、`cursor`、`vscode`、`copilot` 和 `all`，默认 `auto`。
+
+独立归档配置需要 Bash、Python 3.9+，以及支持相应 hooks 的 Agent 客户端。
+需要单独初始化或指定客户端时，在 `main` 分支的仓库根目录执行：
 
 ```bash
 # 自动检测 PATH 中能够找到的客户端

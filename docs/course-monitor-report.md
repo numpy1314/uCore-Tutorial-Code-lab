@@ -32,6 +32,7 @@ Cursor / Copilot 的运行脚本使用 `ucore-hooks` 目录，避免与 rCore �
 | 归档模式 | messages、tool-calls、full，按 Agent 独立配置 |
 | JSONL 文件 | `.ai/agent-sessions/<agent>/<UTC日期时间>_<session-id>.jsonl`，同一会话持续更新同一文件 |
 | 提交快照 | 预提交 Hook 导出并暂存增量事件，按当前暂存区的事件 ID 去重 |
+| 随代码提交 | main/ch1–ch8 放行 `.ai/agent-sessions/`、`.ai/events/` 和 `.ai/submissions/`，普通 `git add` 即可暂存 |
 | 开关与恢复 | 保留已有日志和模式；课程配置重载后生效，归档配置每次 hook 读取 |
 | 容器 | main 提供 Dev Container 初始化与连接后的插件安装入口 |
 | 跨分支使用 | main 安装一次，切换 ch1–ch8 后继续记录 |
@@ -40,7 +41,8 @@ Cursor / Copilot 的运行脚本使用 `ucore-hooks` 目录，避免与 rCore �
 
 源码、配置示例和插件安装包仅放在 `main`。安装器将运行文件放到本地
 `.ai/course-tools/`，建立 `git course` 和 `git agent-plugins` 入口，并设置稳定的提交 Hook。
-本地排除规则写入 Git 的 `info/exclude`，因此切换到不同忽略规则的章节分支后仍然生效。
+工具运行文件、IDE 状态及 Agent 配置的本地排除规则写入 Git 的 `info/exclude`，
+切换章节后仍然生效。重新安装会清理旧版本对课程记录的排除规则。
 
 VS Code 扩展读取已安装的课程配置。Codex、Claude Code 的插件源也指向本地运行副本。
 Agent 项目配置、Cursor hooks 和 Copilot hooks 都作为本地文件保留。
@@ -60,7 +62,7 @@ bash -n scripts/setup-agent-plugins.sh
 
 归档回归测试覆盖四种 Agent、模式过滤、重复事件、完整 JSONL、失败恢复和配置保留。
 跨分支测试在隔离仓库安装工具后切换 main/ch1–ch8，验证运行文件、Git 入口、课程事件、
-四种 Agent 的归档和真实提交 Hook；同时检查安装器不会创建或改写章节的编辑器设置，
+四种 Agent 的归档、普通 `git add .` 暂存三类记录和真实提交 Hook；同时检查安装器不会创建或改写章节的编辑器设置，
 并保留用户已有的 C/C++ 设置。
 VS Code 事件通过安装包中的课程适配器与编辑器接口替身验证。
 Agent CLI 的安装、课程 Codex 调用和归档事件通过模拟客户端与合成会话验证。

@@ -11,6 +11,7 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+RECORD_DIRS = ('.ai/agent-sessions', '.ai/events', '.ai/submissions')
 sys.path.insert(0, str(ROOT / 'scripts'))
 import course_runtime
 
@@ -34,12 +35,18 @@ class CourseRecordingTests(unittest.TestCase):
         self.git('switch', 'main')
         names = subprocess.check_output(['git', 'ls-files', '--cached', '--others', '--exclude-standard', '-z'], cwd=ROOT).decode().split('\0')
         for name in filter(None, names):
+            if any(name.startswith(directory + '/') for directory in RECORD_DIRS):
+                continue
             path = ROOT / name
             if not path.is_file():
                 continue
             destination = self.root / name
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(path, destination)
+        # Keep real classroom records out of the synthetic test fixture.
+        for directory in RECORD_DIRS:
+            if (self.root / directory).exists():
+                shutil.rmtree(self.root / directory)
         self.git('config', 'user.name', 'Course Test')
         self.git('config', 'user.email', 'course-test@example.test')
         self.git('add', '.')
@@ -78,6 +85,16 @@ elif '--json' in args:
 
     def git(self, *args, **kwargs):
         return self.run_command('git', *args, **kwargs)
+
+    def start_course(self, *args, script='course.py', **kwargs):
+        # Exercise the real startup and shell installer without an endless log viewer.
+        runner = '''import runpy, sys
+scope = runpy.run_path(sys.argv[1])
+scope['main'].__globals__['logs'] = lambda: None
+sys.argv = sys.argv[1:]
+scope['main']()
+'''
+        return self.run_command(sys.executable, '-c', runner, str(self.root / script), *args, **kwargs)
 
     def archive_agents(self, branch):
         runtime = self.root / '.ai/course-tools/plugins/ucore-session-archive'
@@ -134,17 +151,34 @@ elif '--json' in args:
             self.assertIn('ANSWER_' + branch, content)
             self.assertEqual(0o600, files[0].stat().st_mode & 0o777)
 
+    def record_paths(self):
+        return sorted(str(path.relative_to(self.root)) for directory in RECORD_DIRS
+                      for path in (self.root / directory).rglob('*') if path.is_file())
+
     def test_install_once_records_on_main_and_all_real_chapter_branches(self):
         node = node_binary()
         if not node:
             self.skipTest('Node.js is required to exercise the VSIX adapter')
         for index in range(1,9):
-            self.git('fetch', '--quiet', str(ROOT), f'refs/remotes/origin/ch{index}:refs/heads/ch{index}')
+            ref = f'refs/heads/ch{index}'
+            if self.git('show-ref', '--verify', '--quiet', ref, cwd=ROOT, check=False).returncode:
+                ref = f'refs/remotes/origin/ch{index}'
+            self.git('fetch', '--quiet', str(ROOT), f'{ref}:refs/heads/ch{index}')
         # Normal installations create source-side bytecode that survives checkout.
         install_env = {key:value for key,value in self.env.items()
                        if key not in ('PYTHONDONTWRITEBYTECODE', 'PYTHONPYCACHEPREFIX')}
-        self.run_command(sys.executable, 'course.py', 'install', env=install_env)
-        self.run_command('bash', 'scripts/setup-agent-plugins.sh', 'all', env=install_env)
+        result = self.start_course(cwd=self.temp, env=install_env)
+        self.assertIn('目标：auto', result.stdout)
+        calls = [json.loads(line) for line in (self.temp / 'cli.jsonl').read_text().splitlines()]
+        plugin_calls = [index for index, call in enumerate(calls)
+                        if call['name'] in ('codex', 'claude') and call['args'][0] == 'plugin']
+        extension_call = next(index for index, call in enumerate(calls)
+                              if call['name'] == 'code' and call['args'][0] == '--install-extension')
+        workspace_call = next(index for index, call in enumerate(calls)
+                              if call['name'] == 'code' and call['args'][0] == '--new-window')
+        self.assertTrue(plugin_calls)
+        self.assertLess(max(plugin_calls), extension_call)
+        self.assertLess(extension_call, workspace_call)
         self.assertTrue(list((self.root / 'scripts').rglob('*.pyc')))
         self.assertTrue(list((self.root / 'plugins').rglob('*.pyc')))
         self.assertEqual(course_runtime.HOOKS_PATH, self.git('config', '--get', 'core.hooksPath').stdout.strip())
@@ -160,21 +194,31 @@ elif '--json' in args:
                     self.assertFalse((self.root / 'plugins/ucore-session-archive/scripts/setup_agents.py').exists())
                     self.assertFalse((self.root / '.course-monitor/config.json').exists())
                     self.assertTrue((self.root / 'os/main.c').is_file())
+                    result = self.start_course('--agent', 'cursor', script='.ai/course-tools/course.py', cwd=self.root / 'os')
+                    self.assertIn('目标：cursor', result.stdout)
                 status = json.loads(self.git('course', 'status').stdout)
                 self.assertTrue(status['recordingEnabled'])
                 self.assertEqual(str(self.root), status['project'])
                 self.run_command(node, str(ROOT / 'tests/record_vscode_events.cjs'), str(self.root), str(extension))
                 self.git('course', 'codex', data='COURSE_PROMPT_' + branch)
                 self.archive_agents(branch)
-                # A clean chapter checkout must remain clean despite local setup and callbacks.
-                self.assertEqual('', self.git('status', '--porcelain', '--untracked-files=all').stdout.strip())
+                # Ordinary staging includes raw records, but excludes installed tools and policies.
+                records = self.record_paths()
+                self.assertTrue(records)
+                self.assertEqual(['?? ' + name for name in records],
+                                 self.git('status', '--porcelain', '--untracked-files=all').stdout.splitlines())
                 self.git('add', '.')
-                self.assertEqual('', self.git('diff', '--cached', '--name-only').stdout.strip())
-                self.git('commit', '--allow-empty', '-m', 'Checkpoint ' + branch)
+                self.assertEqual(records, self.git('diff', '--cached', '--name-only').stdout.splitlines())
+                self.git('commit', '-m', 'Checkpoint ' + branch)
                 paths = self.git('diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD').stdout.splitlines()
-                self.assertTrue(paths)
-                self.assertTrue(all(name.startswith('.ai/submissions/') for name in paths))
-                submitted = [json.loads(line) for name in paths for line in (self.root / name).read_text().splitlines()]
+                self.assertEqual(self.record_paths(), paths)
+                for directory in RECORD_DIRS:
+                    self.assertTrue(any(name.startswith(directory + '/') for name in paths), directory)
+                submitted = [json.loads(line) for name in paths if name.startswith('.ai/submissions/')
+                             for line in (self.root / name).read_text().splitlines()]
+                events = [json.loads(line) for name in paths if name.startswith('.ai/events/')
+                          for line in (self.root / name).read_text().splitlines()]
+                self.assertEqual({event['id'] for event in events}, {event['id'] for event in submitted})
                 self.assertIn('ai_prompt', {event['type'] for event in submitted})
                 self.assertIn('file_save', {event['type'] for event in submitted})
                 source = 'README.md' if branch == 'main' else 'os/main.c'
@@ -199,23 +243,57 @@ elif '--json' in args:
         self.assertEqual(custom_settings, settings.read_text())
         self.assertEqual('', self.git('status', '--porcelain').stdout.strip())
 
+    def test_start_selects_only_requested_agent_with_existing_options(self):
+        result = self.start_course('start', '--agent', 'codex', '--skip-extension')
+        self.assertIn('目标：codex', result.stdout)
+        self.assertTrue((self.root / '.codex/session-archive.json').is_file())
+        for directory in ('.claude', '.cursor', '.vscode'):
+            self.assertFalse((self.root / directory / 'session-archive.json').exists())
+        calls = [json.loads(line) for line in (self.temp / 'cli.jsonl').read_text().splitlines()]
+        self.assertTrue(any(call['name'] == 'codex' and call['args'][0] == 'plugin' for call in calls))
+        self.assertFalse(any(call['name'] == 'claude' for call in calls))
+        self.assertFalse(any(call['args'][0] == '--install-extension' for call in calls))
+        self.assertTrue(any(call['name'] == 'code' and call['args'][0] == '--new-window' for call in calls))
+
+    def test_start_stops_before_recording_install_when_agent_setup_fails(self):
+        policy = self.root / '.cursor/session-archive.json'
+        policy.parent.mkdir(exist_ok=True)
+        policy.write_text('{"enabled":')
+        result = self.start_course(check=False)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn('配置未完成', result.stderr)
+        self.assertEqual('{"enabled":', policy.read_text())
+        self.assertFalse((self.root / '.ai/course-tools').exists())
+        self.assertFalse((self.temp / 'cli.jsonl').exists())
+
     def test_reinstall_preserves_disabled_policy_logs_and_local_git_exclusions(self):
         self.run_command(sys.executable, 'course.py', 'install', '--skip-extension')
         config = self.root / '.ai/course-tools/.course-monitor/config.json'
         value = json.loads(config.read_text())
         value.update(enabled=False, custom='keep')
         config.write_text(json.dumps(value))
-        journal = self.root / '.ai/events/keep.jsonl'
-        journal.write_text('KEEP\n')
+        for directory in RECORD_DIRS:
+            journal = self.root / directory / 'keep.jsonl'
+            journal.parent.mkdir(parents=True, exist_ok=True)
+            journal.write_text('KEEP\n')
         exclude = self.root / '.git/info/exclude'
         with exclude.open('a') as output:
             output.write('/my-local-files/\n')
+            for directory in RECORD_DIRS:
+                output.write('/' + directory + '/\n')
         self.run_command(sys.executable, 'course.py', 'install', '--skip-extension')
         self.assertEqual(value, json.loads(config.read_text()))
-        self.assertEqual('KEEP\n', journal.read_text())
+        for directory in RECORD_DIRS:
+            self.assertEqual('KEEP\n', (self.root / directory / 'keep.jsonl').read_text())
+            self.assertNotIn('/' + directory + '/', exclude.read_text().splitlines())
         self.assertIn('/my-local-files/', exclude.read_text())
         self.assertEqual(1, exclude.read_text().splitlines().count('/.ai/course-tools/'))
         self.assertFalse(json.loads(self.git('course', 'status').stdout)['recordingEnabled'])
+        self.git('add', '.')
+        self.assertEqual(self.record_paths(), self.git('diff', '--cached', '--name-only').stdout.splitlines())
+        before = exclude.read_bytes()
+        self.run_command(sys.executable, 'course.py', 'install', '--skip-extension')
+        self.assertEqual(before, exclude.read_bytes())
 
     def test_existing_commit_hook_is_preserved(self):
         hook = self.root / '.git/hooks/pre-commit'

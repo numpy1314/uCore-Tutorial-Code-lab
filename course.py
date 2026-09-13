@@ -126,8 +126,9 @@ def logs():
         time.sleep(0.5)
 
 def main():
-    parser=argparse.ArgumentParser(description='仓库内的课程记录入口；不带参数时安装并打开实验与实时日志。')
+    parser=argparse.ArgumentParser(description='仓库内的课程记录入口；不带参数时先初始化 AI 归档，再安装并打开实验与实时日志。')
     parser.add_argument('action',nargs='?',default='start',choices=['start','install','logs','status','codex','export'])
+    parser.add_argument('--agent',default='auto',choices=['auto','codex','claude','cursor','vscode','copilot','all'],help='启动时初始化的 AI 归档客户端；默认 auto 自动检测')
     parser.add_argument('--skip-extension',action='store_true',help='仅安装项目 hooks；供容器初始化或已单独安装扩展时使用')
     parser.add_argument('--allow-edits',action='store_true',help='Codex 使用 workspace-write 沙箱；默认只读')
     args=parser.parse_args()
@@ -138,6 +139,8 @@ def main():
         if str(ROOT) not in safe.stdout.splitlines():
             subprocess.run(['git','config','--global','--add','safe.directory',str(ROOT)],check=True)
     check_repository()
+    if args.action=='start':
+        subprocess.run(['bash',str(BUNDLE/'scripts/setup-agent-plugins.sh'),args.agent],cwd=ROOT,check=True)
     if args.action in ['start','install']:
         install(args.skip_extension)
         if args.action=='start': open_workspace();logs()
